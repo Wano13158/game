@@ -38,7 +38,10 @@ class Beaver:
     def __init__(self, frames):
         self.frames = frames
         self.hole = None
-        self.rect = frames[0].get_rect()
+        # A beaver can be drawn as soon as it first appears, before update()
+        # has selected an animation frame.
+        self.image = frames[0]
+        self.rect = self.image.get_rect()
         self.visible = False
         self.age = 0.0
         self.duration = 0.0
