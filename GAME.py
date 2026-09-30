@@ -115,7 +115,9 @@ class Beaver(Sprite):
 
     def show(self):
         hole = choice(self.holes)
-        self.rect.midbottom = (hole.rect.centerx, hole.rect.bottom + 4)
+        # Розташовуємо бобра по центру нори. Нора малюється поверх нього,
+        # тому нижня частина бобра виглядає схованою всередині, а не перед нею.
+        self.rect.midbottom = hole.rect.midbottom
         self.visible = True
         self.next_move = pg.time.get_ticks() + 700
 
@@ -223,9 +225,9 @@ def game():
         time_label.set_text(f":{seconds_left}")
 
         screen.blit(image_bg, (0, 0))
+        beaver.draw(screen)
         for hole in holes:
             hole.draw(screen)
-        beaver.draw(screen)
         screen.blit(image_beaver, (10, 8))
         screen.blit(image_timer, (350, 3))
         score_label.draw(screen)
