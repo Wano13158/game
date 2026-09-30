@@ -1,224 +1,307 @@
-"""Whack-a-beaver.
-
-All game art lives next to this file, so the game can be started from any
-working directory with ``python GAME.py``.
-"""
+"""Проста гра про бобрів, побудована за структурою example.py."""
 
 from pathlib import Path
-from random import choice, randint
+from random import choice
 
-import pygame
+import pygame as pg
 
 
-WIDTH, HEIGHT = 500, 500
-FPS = 60
+YELLOW = (200, 200, 0)
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+BLUE = (0, 0, 255)
+GREEN = (0, 255, 0)
+RED = (255, 0, 0)
+
+WIDTH = 500
+HEIGHT = 500
 ROUND_SECONDS = 15
 WIN_SCORE = 10
 ASSETS = Path(__file__).resolve().parent
 
 
+pg.init()
+screen = pg.display.set_mode((WIDTH, HEIGHT))
+pg.display.set_caption("Клікер-Бобер")
+
+
+# завантаження картинок
 def load_image(name, size=None):
-    """Load an image with transparency and optionally scale it."""
-    image = pygame.image.load(str(ASSETS / name)).convert_alpha()
-    return pygame.transform.smoothscale(image, size) if size else image
+    image = pg.image.load(str(ASSETS / name)).convert_alpha()
+    return pg.transform.smoothscale(image, size) if size else image
 
 
+image_bg = load_image("fon.png", (WIDTH, HEIGHT))
+image_hole = load_image("nirka.png", (80, 50))
+image_beaver = load_image("bobr8.png")
+image_hammer = load_image("molot.png")
+image_hammer_down = load_image("molot_down.png")
+image_timer = load_image("timer.png", (58, 58))
+image_win = load_image("win.png", (128, 128))
+image_lose = load_image("lose.png", (128, 128))
+
+
+#####################################
+#    елементи з попередніх уроків   #
+#####################################
+class TextLabel:
+    # Текстова позначка
+    def __init__(self, x, y, size=32, color=BLACK):
+        self.x = x
+        self.y = y
+        self.color = color
+        self.image = None
+        self.font = pg.font.Font(None, size)
+
+    def set_text(self, text):
+        self.image = self.font.render(text, True, self.color)
+
+    def draw(self, surface):
+        surface.blit(self.image, (self.x, self.y))
+
+
+class Button:
+    # кнопка з меню example.py
+    def __init__(self, x, y, text, w):
+        self.rect = pg.Rect(x, y, w, 50)
+        self.rect_image = pg.Surface((w, 50))
+        self.rect_image.fill(BLUE)
+        self.rect_image_active = pg.Surface((w, 50))
+        self.rect_image_active.fill(GREEN)
+        self.font = pg.font.Font(None, 32)
+        self.text_image = self.font.render(text, True, RED)
+        self.text_rect = self.text_image.get_rect(center=self.rect.center)
+        self.active = False
+        self.fn = None
+
+    def update(self):
+        self.active = self.rect.collidepoint(pg.mouse.get_pos())
+
+        if self.active and pg.mouse.get_pressed()[0] and self.fn:
+            self.fn()
+
+    def draw(self, surface):
+        image = self.rect_image_active if self.active else self.rect_image
+        surface.blit(image, self.rect)
+        surface.blit(self.text_image, self.text_rect)
+
+    def onclick(self, fn):
+        self.fn = fn
+
+
+#####################################
+#          ігрові класи             #
+#####################################
 class Sprite:
+    # базовий клас для спадкування класами гри
     def __init__(self, x, y, image):
         self.image = image
-        self.rect = self.image.get_rect(topleft=(x, y))
+        self.rect = pg.Rect(x, y, image.get_width(), image.get_height())
+
+    def collide(self, sprite):
+        return self.rect.colliderect(sprite.rect)
 
     def draw(self, surface):
         surface.blit(self.image, self.rect)
 
 
-class Beaver:
-    """A beaver that rises from one unoccupied hole at a time."""
-
-    def __init__(self, frames):
-        self.frames = frames
-        self.hole = None
-        # A beaver can be drawn as soon as it first appears, before update()
-        # has selected an animation frame.
-        self.image = frames[0]
-        self.rect = self.image.get_rect()
+class Beaver(Sprite):
+    # бобер з'являється в одній з нірок
+    def __init__(self, holes):
+        super().__init__(0, 0, image_beaver)
+        self.holes = holes
         self.visible = False
-        self.age = 0.0
-        self.duration = 0.0
-        self.cooldown = randint(250, 700) / 1000
+        self.next_move = 0
 
-    def reset(self):
-        self.hole = None
-        self.visible = False
-        self.age = 0.0
-        self.cooldown = randint(250, 700) / 1000
-
-    def show(self, hole):
-        self.hole = hole
+    def show(self):
+        hole = choice(self.holes)
+        self.rect.midbottom = (hole.rect.centerx, hole.rect.bottom + 4)
         self.visible = True
-        self.age = 0.0
-        self.duration = randint(1050, 1650) / 1000
-        self.rect.midbottom = (hole.rect.centerx, hole.rect.bottom + 3)
+        self.next_move = pg.time.get_ticks() + 700
 
-    def update(self, dt, holes, occupied):
-        if not self.visible:
-            self.cooldown -= dt
-            available = [hole for hole in holes if hole not in occupied]
-            if self.cooldown <= 0 and available:
-                self.show(choice(available))
-            return
-
-        self.age += dt
-        # The four beaver pictures form a small rising animation.
-        frame_index = min(len(self.frames) - 1, int(self.age / 0.12))
-        old_bottom = self.rect.bottom
-        self.image = self.frames[frame_index]
-        self.rect = self.image.get_rect(midbottom=(self.hole.rect.centerx, old_bottom))
-        if self.age >= self.duration:
-            self.reset()
+    def update(self):
+        if pg.time.get_ticks() >= self.next_move:
+            self.show()
 
     def hit(self):
         if not self.visible:
             return False
-        self.reset()
+        self.visible = False
+        self.next_move = pg.time.get_ticks() + 250
         return True
 
     def draw(self, surface):
         if self.visible:
-            super_draw = surface.blit
-            super_draw(self.image, self.rect)
+            super().draw(surface)
 
 
 class Hammer(Sprite):
-    def __init__(self, normal, down):
-        super().__init__(0, 0, normal)
-        self.normal = normal
-        self.down = down
-        self.hit_until = 0
+    # молоток рухається за курсором
+    def __init__(self):
+        super().__init__(0, 0, image_hammer)
+        self.down_until = 0
 
-    def move_to(self, position):
-        self.rect.center = position
+    def update(self):
+        self.rect.center = pg.mouse.get_pos()
 
-    def strike(self, now):
-        self.hit_until = now + 110
+    def hit(self):
+        self.down_until = pg.time.get_ticks() + 120
 
     def draw(self, surface):
-        surface.blit(self.down if pygame.time.get_ticks() < self.hit_until else self.normal, self.rect)
+        image = image_hammer_down if pg.time.get_ticks() < self.down_until else image_hammer
+        surface.blit(image, self.rect)
 
 
-class Game:
-    def __init__(self):
-        pygame.init()
-        pygame.display.set_caption("Клікер-Бобер")
-        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
-        self.clock = pygame.time.Clock()
-        self.background = load_image("fon.png", (WIDTH, HEIGHT))
-        self.hole_image = load_image("nirka.png", (80, 50))
-        self.beaver_frames = [load_image(f"bobr{number}.png") for number in range(5, 9)]
-        self.timer_icon = load_image("timer.png", (58, 58))
-        self.hammer = Hammer(load_image("molot.png"), load_image("molot_down.png"))
-        self.play_button = Sprite(186, 330, load_image("btn.png", (128, 128)))
-        self.win_image = load_image("win.png", (128, 128))
-        self.lose_image = load_image("lose.png", (128, 128))
-        self.font = pygame.font.Font(None, 40)
-        self.big_font = pygame.font.Font(None, 46)
-        self.holes = self.make_holes()
-        self.beavers = [Beaver(self.beaver_frames) for _ in range(3)]
-        self.running = True
-        self.reset_round()
+#####################################
+#    ігрові об'єкти та цикл         #
+#####################################
+def menu():
+    global game_part
+    start_button = Button(100, 300, "Почати гру", 300)
 
-    def make_holes(self):
-        # These positions line up with the three perspective lanes in fon.png.
-        positions = ((50, 190), (205, 190), (350, 190),
+    def on_start():
+        global game_part
+        game_part = "game"
+
+    start_button.onclick(on_start)
+
+    while game_part == "menu":
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
+                pg.quit()
+                raise SystemExit
+
+        start_button.update()
+        screen.blit(image_bg, (0, 0))
+        title = pg.font.Font(None, 48).render("КЛІКЕР-БОБЕР", True, WHITE)
+        hint = pg.font.Font(None, 30).render("Спіймай 10 бобрів за 15 секунд!", True, WHITE)
+        screen.blit(title, title.get_rect(center=(WIDTH // 2, 150)))
+        screen.blit(hint, hint.get_rect(center=(WIDTH // 2, 205)))
+        start_button.draw(screen)
+        pg.display.flip()
+        clock.tick(50)
+
+
+def game():
+    global game_part
+    holes = [
+        Sprite(x, y, image_hole)
+        for x, y in ((50, 190), (205, 190), (350, 190),
                      (50, 280), (205, 280), (350, 280),
                      (50, 370), (205, 370), (350, 370))
-        return [Sprite(x, y, self.hole_image) for x, y in positions]
+    ]
+    beaver = Beaver(holes)
+    hammer = Hammer()
+    score = 0
+    start_time = pg.time.get_ticks()
+    score_label = TextLabel(65, 18, 32, RED)
+    time_label = TextLabel(410, 18, 32, RED)
+    score_label.set_text(":0")
+    pg.mouse.set_visible(False)
 
-    def reset_round(self):
-        self.score = 0
-        self.time_left = float(ROUND_SECONDS)
-        self.finished = False
-        pygame.mouse.set_visible(False)
-        for beaver in self.beavers:
-            beaver.reset()
+    while game_part == "game":
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
+                pg.quit()
+                raise SystemExit
+            if event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+                hammer.hit()
+                if hammer.collide(beaver) and beaver.hit():
+                    score += 1
+                    score_label.set_text(f":{score}")
 
-    def handle_event(self, event):
-        if event.type == pygame.QUIT:
-            self.running = False
-        elif event.type == pygame.MOUSEMOTION:
-            self.hammer.move_to(event.pos)
-        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if self.finished:
-                if self.play_button.rect.collidepoint(event.pos):
-                    self.reset_round()
-                return
-            self.hammer.move_to(event.pos)
-            self.hammer.strike(pygame.time.get_ticks())
-            for beaver in self.beavers:
-                if beaver.visible and self.hammer.rect.colliderect(beaver.rect) and beaver.hit():
-                    self.score += 1
-                    break
+        seconds_left = ROUND_SECONDS - (pg.time.get_ticks() - start_time) // 1000
+        if score >= WIN_SCORE:
+            game_part = "victory"
+            break
+        if seconds_left <= 0:
+            game_part = "gameover"
+            break
 
-    def update(self, dt):
-        if self.finished:
-            return
-        self.time_left = max(0.0, self.time_left - dt)
-        occupied = {beaver.hole for beaver in self.beavers if beaver.visible}
-        for beaver in self.beavers:
-            beaver.update(dt, self.holes, occupied)
-            occupied = {item.hole for item in self.beavers if item.visible}
-        if self.time_left == 0:
-            self.finished = True
-            pygame.mouse.set_visible(True)
+        beaver.update()
+        hammer.update()
+        time_label.set_text(f":{seconds_left}")
 
-    def text(self, value, x, y, color, font=None):
-        image = (font or self.font).render(value, True, color)
-        self.screen.blit(image, (x, y))
+        screen.blit(image_bg, (0, 0))
+        for hole in holes:
+            hole.draw(screen)
+        beaver.draw(screen)
+        screen.blit(image_beaver, (10, 8))
+        screen.blit(image_timer, (350, 3))
+        score_label.draw(screen)
+        time_label.draw(screen)
+        hammer.draw(screen)
+        pg.display.flip()
+        clock.tick(50)
 
-    def draw_hud(self):
-        # Icons replace verbose labels and retain the compact layout of the reference.
-        self.screen.blit(self.beaver_frames[-1], (10, 8))
-        self.text(f":{self.score}", 66, 18, (235, 20, 20))
-        self.screen.blit(self.timer_icon, (350, 3))
-        self.text(f":{max(0, int(self.time_left + 0.999))}", 410, 18, (235, 20, 20))
-
-    def draw_result(self):
-        panel = pygame.Surface((360, 285), pygame.SRCALPHA)
-        panel.fill((20, 45, 80, 220))
-        self.screen.blit(panel, (70, 105))
-        won = self.score >= WIN_SCORE
-        result = self.win_image if won else self.lose_image
-        self.screen.blit(result, result.get_rect(center=(250, 180)))
-        title = self.big_font.render("ПЕРЕМОГА!" if won else "СПРОБУЙ ЩЕ!", True, (255, 255, 255))
-        self.screen.blit(title, title.get_rect(center=(250, 263)))
-        self.text(f"Рахунок: {self.score}", 172, 288, (255, 255, 255), self.font)
-        self.play_button.draw(self.screen)
-
-    def draw(self):
-        self.screen.blit(self.background, (0, 0))
-        for hole in self.holes:
-            hole.draw(self.screen)
-        for beaver in self.beavers:
-            beaver.draw(self.screen)
-        self.draw_hud()
-        if self.finished:
-            self.draw_result()
-        else:
-            self.hammer.draw(self.screen)
-        pygame.display.flip()
-
-    def run(self):
-        pygame.mouse.set_visible(False)
-        self.hammer.move_to(pygame.mouse.get_pos())
-        while self.running:
-            dt = self.clock.tick(FPS) / 1000
-            for event in pygame.event.get():
-                self.handle_event(event)
-            self.update(dt)
-            self.draw()
-        pygame.mouse.set_visible(True)
-        pygame.quit()
+    pg.mouse.set_visible(True)
 
 
-if __name__ == "__main__":
-    Game().run()
+# меню перемоги
+def victory():
+    global game_part
+    font = pg.font.Font(None, 48)
+    img = font.render("Перемога", True, WHITE)
+    menu_button = Button(100, 350, "Меню", 300)
+
+    def on_menu():
+        global game_part
+        game_part = "menu"
+
+    menu_button.onclick(on_menu)
+
+    while game_part == "victory":
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
+                pg.quit()
+                raise SystemExit
+        menu_button.update()
+        screen.blit(image_bg, (0, 0))
+        screen.blit(image_win, image_win.get_rect(center=(250, 160)))
+        screen.blit(img, img.get_rect(center=(250, 270)))
+        menu_button.draw(screen)
+        pg.display.flip()
+        clock.tick(50)
+
+
+# меню програшу
+def gameover():
+    global game_part
+    font = pg.font.Font(None, 48)
+    img = font.render("Програш", True, WHITE)
+    menu_button = Button(100, 350, "Меню", 300)
+
+    def on_menu():
+        global game_part
+        game_part = "menu"
+
+    menu_button.onclick(on_menu)
+
+    while game_part == "gameover":
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
+                pg.quit()
+                raise SystemExit
+        menu_button.update()
+        screen.blit(image_bg, (0, 0))
+        screen.blit(image_lose, image_lose.get_rect(center=(250, 160)))
+        screen.blit(img, img.get_rect(center=(250, 270)))
+        menu_button.draw(screen)
+        pg.display.flip()
+        clock.tick(50)
+
+
+game_part = "menu"
+clock = pg.time.Clock()
+
+
+# цикл з вибором меню
+while True:
+    if game_part == "menu":
+        menu()
+    elif game_part == "game":
+        game()
+    elif game_part == "victory":
+        victory()
+    elif game_part == "gameover":
+        gameover()
