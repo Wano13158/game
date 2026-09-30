@@ -1,5 +1,3 @@
-"""Проста гра про бобрів, побудована за структурою example.py."""
-
 from pathlib import Path
 from random import choice
 
@@ -22,10 +20,9 @@ ASSETS = Path(__file__).resolve().parent
 
 pg.init()
 screen = pg.display.set_mode((WIDTH, HEIGHT))
-pg.display.set_caption("Клікер-Бобер")
+pg.display.set_caption("Клікер-Шльопа")
 
 
-# завантаження картинок
 def load_image(name, size=None):
     image = pg.image.load(str(ASSETS / name)).convert_alpha()
     return pg.transform.smoothscale(image, size) if size else image
@@ -33,7 +30,7 @@ def load_image(name, size=None):
 
 image_bg = load_image("fon.png", (WIDTH, HEIGHT))
 image_hole = load_image("nirka.png", (80, 50))
-image_beaver = load_image("bobr8.png")
+image_shlepa = load_image("bobr8.png")
 image_hammer = load_image("molot.png")
 image_hammer_down = load_image("molot_down.png")
 image_timer = load_image("timer.png", (58, 58))
@@ -41,11 +38,7 @@ image_win = load_image("win.png", (128, 128))
 image_lose = load_image("lose.png", (128, 128))
 
 
-#####################################
-#    елементи з попередніх уроків   #
-#####################################
 class TextLabel:
-    # Текстова позначка
     def __init__(self, x, y, size=32, color=BLACK):
         self.x = x
         self.y = y
@@ -61,7 +54,6 @@ class TextLabel:
 
 
 class Button:
-    # кнопка з меню example.py
     def __init__(self, x, y, text, w):
         self.rect = pg.Rect(x, y, w, 50)
         self.rect_image = pg.Surface((w, 50))
@@ -89,11 +81,7 @@ class Button:
         self.fn = fn
 
 
-#####################################
-#          ігрові класи             #
-#####################################
 class Sprite:
-    # базовий клас для спадкування класами гри
     def __init__(self, x, y, image):
         self.image = image
         self.rect = pg.Rect(x, y, image.get_width(), image.get_height())
@@ -105,18 +93,15 @@ class Sprite:
         surface.blit(self.image, self.rect)
 
 
-class Beaver(Sprite):
-    # бобер з'являється в одній з нірок
+class Shlepa(Sprite):
     def __init__(self, holes):
-        super().__init__(0, 0, image_beaver)
+        super().__init__(0, 0, image_shlepa)
         self.holes = holes
         self.visible = False
         self.next_move = 0
 
     def show(self):
         hole = choice(self.holes)
-        # Розташовуємо бобра по центру нори. Нора малюється поверх нього,
-        # тому нижня частина бобра виглядає схованою всередині, а не перед нею.
         self.rect.midbottom = hole.rect.midbottom
         self.visible = True
         self.next_move = pg.time.get_ticks() + 700
@@ -138,7 +123,6 @@ class Beaver(Sprite):
 
 
 class Hammer(Sprite):
-    # молоток рухається за курсором
     def __init__(self):
         super().__init__(0, 0, image_hammer)
         self.down_until = 0
@@ -154,9 +138,6 @@ class Hammer(Sprite):
         surface.blit(image, self.rect)
 
 
-#####################################
-#    ігрові об'єкти та цикл         #
-#####################################
 def menu():
     global game_part
     start_button = Button(100, 300, "Почати гру", 300)
@@ -175,8 +156,8 @@ def menu():
 
         start_button.update()
         screen.blit(image_bg, (0, 0))
-        title = pg.font.Font(None, 48).render("КЛІКЕР-БОБЕР", True, WHITE)
-        hint = pg.font.Font(None, 30).render("Спіймай 10 бобрів за 15 секунд!", True, WHITE)
+        title = pg.font.Font(None, 48).render("КЛІКЕР-ШЛЬОПА", True, WHITE)
+        hint = pg.font.Font(None, 30).render("Спіймай 10 Шльоп за 15 секунд!", True, WHITE)
         screen.blit(title, title.get_rect(center=(WIDTH // 2, 150)))
         screen.blit(hint, hint.get_rect(center=(WIDTH // 2, 205)))
         start_button.draw(screen)
@@ -192,7 +173,7 @@ def game():
                      (50, 280), (205, 280), (350, 280),
                      (50, 370), (205, 370), (350, 370))
     ]
-    beaver = Beaver(holes)
+    shlepa = Shlepa(holes)
     hammer = Hammer()
     score = 0
     start_time = pg.time.get_ticks()
@@ -208,7 +189,7 @@ def game():
                 raise SystemExit
             if event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
                 hammer.hit()
-                if hammer.collide(beaver) and beaver.hit():
+                if hammer.collide(shlepa) and shlepa.hit():
                     score += 1
                     score_label.set_text(f":{score}")
 
@@ -220,15 +201,15 @@ def game():
             game_part = "gameover"
             break
 
-        beaver.update()
+        shlepa.update()
         hammer.update()
         time_label.set_text(f":{seconds_left}")
 
         screen.blit(image_bg, (0, 0))
-        beaver.draw(screen)
+        shlepa.draw(screen)
         for hole in holes:
             hole.draw(screen)
-        screen.blit(image_beaver, (10, 8))
+        screen.blit(image_shlepa, (10, 8))
         screen.blit(image_timer, (350, 3))
         score_label.draw(screen)
         time_label.draw(screen)
@@ -239,7 +220,6 @@ def game():
     pg.mouse.set_visible(True)
 
 
-# меню перемоги
 def victory():
     global game_part
     font = pg.font.Font(None, 48)
@@ -266,7 +246,6 @@ def victory():
         clock.tick(50)
 
 
-# меню програшу
 def gameover():
     global game_part
     font = pg.font.Font(None, 48)
@@ -297,7 +276,6 @@ game_part = "menu"
 clock = pg.time.Clock()
 
 
-# цикл з вибором меню
 while True:
     if game_part == "menu":
         menu()
